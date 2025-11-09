@@ -1,0 +1,13 @@
+name = "web3-homework-assistant"
+main = "dist/worker.js"
+compatibility_date = "2025-11-01"
+
+# R2 绑定
+[[r2_buckets]]
+binding = "R2_BUCKET"
+bucket_name = "jingcheng-homeworks"
+
+# Vectorize 绑定
+[[vectorize]]
+binding = "VECTOR_INDEX"
+index_name = "homework-index"
