@@ -1,0 +1,25 @@
+{
+  "name": "web3-homework-assistant",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Web3精英班课后作业小助手 - 基于Cloudflare Workers的RAG系统",
+  "main": "src/worker.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "build": "tsc && node build.js",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "hono": "^4.0.0",
+    "pdf-parse": "^1.1.1",
+    "openai": "^4.20.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20231218.0",
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.3",
+    "wrangler": "^3.22.0",
+    "esbuild": "^0.19.8"
+  }
+}
