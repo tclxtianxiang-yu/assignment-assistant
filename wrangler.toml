@@ -1,4 +1,4 @@
-name = "web3-homework-assistant"
+name = "assignment-assistant"
 main = "dist/worker.js"
 compatibility_date = "2025-11-01"
 
