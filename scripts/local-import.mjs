@@ -98,16 +98,24 @@ function chunkText(text, metadata = {}) {
     .filter(p => p.length > 0);
 
   let currentChunk = '';
+  let currentPage = 1;
   let chunkIndex = 0;
 
   for (const paragraph of paragraphs) {
+    // 检测页码标记
+    const pageMatch = paragraph.match(/第\s*(\d+)\s*页|Page\s*(\d+)/i);
+    if (pageMatch) {
+      currentPage = parseInt(pageMatch[1] || pageMatch[2]);
+      continue;
+    }
+
     // 如果段落本身太长，强制分割
     if (paragraph.length > CHUNK_SIZE) {
       if (currentChunk) {
         chunks.push({
-          id: `${metadata.doc_id}-ck${String(chunkIndex).padStart(3, '0')}`,
+          id: `${metadata.doc_id}-p${currentPage}-ck${String(chunkIndex).padStart(3, '0')}`,
           text: currentChunk.trim(),
-          metadata: { ...metadata, chunk_index: chunkIndex },
+          metadata: { ...metadata, page: currentPage },
         });
         chunkIndex++;
         currentChunk = '';
@@ -117,9 +125,9 @@ function chunkText(text, metadata = {}) {
       for (let i = 0; i < paragraph.length; i += CHUNK_SIZE - CHUNK_OVERLAP) {
         const subChunk = paragraph.substring(i, i + CHUNK_SIZE);
         chunks.push({
-          id: `${metadata.doc_id}-ck${String(chunkIndex).padStart(3, '0')}`,
+          id: `${metadata.doc_id}-p${currentPage}-ck${String(chunkIndex).padStart(3, '0')}`,
           text: subChunk.trim(),
-          metadata: { ...metadata, chunk_index: chunkIndex },
+          metadata: { ...metadata, page: currentPage },
         });
         chunkIndex++;
       }
@@ -130,9 +138,9 @@ function chunkText(text, metadata = {}) {
     if (currentChunk.length + paragraph.length + 2 > CHUNK_SIZE) {
       if (currentChunk) {
         chunks.push({
-          id: `${metadata.doc_id}-ck${String(chunkIndex).padStart(3, '0')}`,
+          id: `${metadata.doc_id}-p${currentPage}-ck${String(chunkIndex).padStart(3, '0')}`,
           text: currentChunk.trim(),
-          metadata: { ...metadata, chunk_index: chunkIndex },
+          metadata: { ...metadata, page: currentPage },
         });
         chunkIndex++;
       }
@@ -148,9 +156,9 @@ function chunkText(text, metadata = {}) {
   // 添加最后一个 chunk
   if (currentChunk.trim()) {
     chunks.push({
-      id: `${metadata.doc_id}-ck${String(chunkIndex).padStart(3, '0')}`,
+      id: `${metadata.doc_id}-p${currentPage}-ck${String(chunkIndex).padStart(3, '0')}`,
       text: currentChunk.trim(),
-      metadata: { ...metadata, chunk_index: chunkIndex },
+      metadata: { ...metadata, page: currentPage },
     });
   }
 
@@ -321,8 +329,10 @@ async function main() {
       }
 
       // 2. 分块
+      // 重要：doc_id 必须包含 assignments/ 前缀和 .pdf 后缀，与在线导入保持一致
+      const doc_id = `assignments/${fileName}`;
       const metadata = {
-        doc_id: fileName.replace('.pdf', ''),
+        doc_id: doc_id,
         phase: fileName.match(/([一二三四五六七八九十]+)阶段/)?.[1] + '阶段' || '未知阶段',
         section: fileName.replace('.pdf', ''),
         updated_at: Date.now(),

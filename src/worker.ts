@@ -186,6 +186,75 @@ app.post('/api/reindex', async (c) => {
   }
 });
 
+// API: 调试检索（管理员功能）
+app.post('/api/debug/retrieve', async (c) => {
+  try {
+    const { question } = await c.req.json();
+
+    if (!question) {
+      return c.json({ error: 'Missing question' }, 400);
+    }
+
+    console.log('[Debug] Question:', question);
+
+    // 1. 生成问题的 embedding
+    const { generateEmbedding } = await import('./utils/embeddings');
+    let queryEmbedding;
+    try {
+      queryEmbedding = await generateEmbedding(question, c.env);
+      console.log('[Debug] ✓ Query embedding generated, dimensions:', queryEmbedding.length);
+    } catch (error) {
+      console.error('[Debug] ✗ Embedding generation failed:', error);
+      return c.json({
+        error: 'Failed to generate embedding',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      }, 500);
+    }
+
+    // 2. 查询 Vectorize
+    console.log('[Debug] Querying Vectorize with topK=10...');
+    const results = await c.env.VECTOR_INDEX.query(queryEmbedding, {
+      topK: 10,
+      returnMetadata: true,
+      returnValues: false,
+    });
+
+    console.log(`[Debug] Found ${results.matches.length} matches`);
+
+    // 3. 格式化结果
+    const debugResults = results.matches.map((match: any, index: number) => ({
+      rank: index + 1,
+      id: match.id,
+      score: match.score,
+      metadata: {
+        doc_id: match.metadata?.doc_id,
+        phase: match.metadata?.phase,
+        section: match.metadata?.section,
+        page: match.metadata?.page,
+      },
+      text_preview: match.metadata?.text?.substring(0, 200) + '...' || 'No text',
+    }));
+
+    return c.json({
+      question,
+      totalMatches: results.matches.length,
+      matches: debugResults,
+      embeddingDimensions: queryEmbedding.length,
+      timestamp: Date.now(),
+    });
+  } catch (error) {
+    console.error('[Debug] Error:', error);
+    return c.json(
+      {
+        error: 'Internal server error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+      },
+      500
+    );
+  }
+});
+
 // 前端应用路由
 app.get('/app', async (c) => {
   return c.html(FRONTEND_HTML);
