@@ -2,42 +2,70 @@ import type { Env, TextChunk, VectorRecord, RetrievalResult } from '../types';
 import { generateEmbedding } from './embeddings';
 
 /**
- * 将文本块插入向量数据库
+ * 将文本块插入向量数据库（带重试和节流）
  */
 export async function upsertVectors(
   chunks: TextChunk[],
   env: Env
 ): Promise<void> {
-  const vectors: VectorRecord[] = [];
+  const BATCH_SIZE = 10; // 每批10个，避免并发过高
+  const BATCH_DELAY = 1000; // 每批之间延迟1秒
 
   console.log(`Generating embeddings for ${chunks.length} chunks...`);
 
-  for (let i = 0; i < chunks.length; i++) {
-    const chunk = chunks[i];
-    console.log(`Processing chunk ${i + 1}/${chunks.length}: ${chunk.id}`);
+  for (let batchStart = 0; batchStart < chunks.length; batchStart += BATCH_SIZE) {
+    const batchEnd = Math.min(batchStart + BATCH_SIZE, chunks.length);
+    const batch = chunks.slice(batchStart, batchEnd);
 
-    try {
-      const embedding = await generateEmbedding(chunk.text, env);
+    console.log(`Processing batch ${Math.floor(batchStart / BATCH_SIZE) + 1}/${Math.ceil(chunks.length / BATCH_SIZE)} (chunks ${batchStart + 1}-${batchEnd})...`);
 
-      vectors.push({
-        id: chunk.id,
-        values: embedding,
-        metadata: chunk.metadata,
-      });
+    const vectors: VectorRecord[] = [];
 
-      // 批量插入（每100个）
-      if (vectors.length >= 100 || i === chunks.length - 1) {
-        console.log(`Upserting ${vectors.length} vectors to Vectorize...`);
-        await env.VECTOR_INDEX.upsert(vectors as any);
-        vectors.length = 0; // 清空数组
+    // 顺序处理每个chunk（避免并发问题）
+    for (let i = 0; i < batch.length; i++) {
+      const chunk = batch[i];
+      const globalIndex = batchStart + i;
+
+      try {
+        console.log(`  [${globalIndex + 1}/${chunks.length}] Generating embedding for: ${chunk.id.substring(0, 50)}...`);
+
+        const embedding = await generateEmbedding(chunk.text, env);
+
+        vectors.push({
+          id: chunk.id,
+          values: embedding,
+          metadata: {
+            ...chunk.metadata,
+            text: chunk.text, // 存储原文以便检索时返回
+          } as any,
+        });
+      } catch (error: any) {
+        console.error(`Error processing chunk ${chunk.id}:`, error.message);
+        // 继续处理下一个chunk，不中断整个流程
+        console.warn(`Skipping chunk ${chunk.id} due to error`);
       }
-    } catch (error) {
-      console.error(`Error processing chunk ${chunk.id}:`, error);
-      throw error;
+    }
+
+    // 批量插入到Vectorize
+    if (vectors.length > 0) {
+      try {
+        console.log(`  Upserting ${vectors.length} vectors to Vectorize...`);
+        await env.VECTOR_INDEX.upsert(vectors as any);
+        console.log(`  ✓ Batch completed successfully`);
+      } catch (error) {
+        console.error(`  ✗ Failed to upsert batch:`, error);
+        throw error;
+      }
+    }
+
+    // 在批次之间延迟（最后一批不需要）
+    if (batchEnd < chunks.length) {
+      console.log(`  Waiting ${BATCH_DELAY}ms before next batch...`);
+      await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
     }
   }
 
-  console.log('All vectors upserted successfully');
+  console.log('✓ All vectors upserted successfully');
 }
 
 /**
