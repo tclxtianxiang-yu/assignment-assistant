@@ -217,17 +217,10 @@ app.post("/api/chat", async (c) => {
 
 ⸻
 
-版本规划
-	•	v1（本次）：单 PDF、当天作业卡片、RAG 对话、定时索引。
-	•	v1.1：多期次 PDF 自动归档、后台一键刷新索引、引用点击跳页。
-	•	v2：学员登录、个人进度、题目结构化解析（自动拆解任务清单）。
-	•	v3：项目代码模板生成、评审 Rubric 对比、示例仓库检索（Code-RAG）。
-
-⸻
-
 你需要知道的“平台可行性”要点（已验证文档）
 	•	Workers 原生读写 R2（绑定方式与 API 示例）。 ￼
 	•	Vectorize 是 Cloudflare 的全球分布式向量数据库，Workers 通过 binding 直接用，支持插入/查询。 ￼
 	•	Workers AI 使用 OpenAI ，直接把密钥通过wrangler命令行添加到Workers设置中，密钥: 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。 ￼
 	•	Workers ingest/重建索引。 ￼
 	•	Mastra × Cloudflare 有部署器与示例，可在 Workers 上运行多 Agent/Workflow。 ￼
+  •	项目开发到构建步骤即可，因为我cloudfare是用的0$套餐，不支持wrangler命令行部署，所以我会进行手动部署。
