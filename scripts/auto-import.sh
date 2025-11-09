@@ -65,7 +65,9 @@ START_CHUNK=0
 BATCH_COUNT=0
 TOTAL_PROCESSED=0
 TOTAL_CHUNKS=0
+TOTAL_FAILED=0
 HAS_MORE=true
+ALL_ERRORS=""
 
 print_info "开始导入..."
 echo ""
@@ -75,14 +77,38 @@ while [ "$HAS_MORE" = "true" ]; do
 
     print_info "正在处理第 $BATCH_COUNT 批 (startChunk: $START_CHUNK)..."
 
-    # 调用API
-    RESPONSE=$(curl -s -X POST "$API_URL" \
-        -H "Content-Type: application/json" \
-        -d "{\"startChunk\": $START_CHUNK, \"maxChunks\": $MAX_CHUNKS_PER_BATCH}")
+    # 调用API（带重试机制）
+    MAX_RETRIES=3
+    RETRY_COUNT=0
+    RESPONSE=""
+
+    while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+        RESPONSE=$(curl -s -X POST "$API_URL" \
+            -H "Content-Type: application/json" \
+            -d "{\"startChunk\": $START_CHUNK, \"maxChunks\": $MAX_CHUNKS_PER_BATCH}" \
+            -w "\n%{http_code}")
+
+        # 提取HTTP状态码和响应体
+        HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+        RESPONSE_BODY=$(echo "$RESPONSE" | sed '$d')
+
+        # 检查是否成功（HTTP 200）
+        if [ "$HTTP_CODE" = "200" ] && [ ! -z "$RESPONSE_BODY" ]; then
+            RESPONSE="$RESPONSE_BODY"
+            break
+        fi
+
+        RETRY_COUNT=$((RETRY_COUNT + 1))
+        if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+            WAIT_TIME=$((2 ** RETRY_COUNT))
+            print_warning "API调用失败 (HTTP $HTTP_CODE)，${WAIT_TIME}秒后重试 ($RETRY_COUNT/$MAX_RETRIES)..."
+            sleep $WAIT_TIME
+        fi
+    done
 
     # 检查响应是否为空
     if [ -z "$RESPONSE" ]; then
-        print_error "API返回空响应！"
+        print_error "API调用失败（已重试 $MAX_RETRIES 次），停止处理"
         exit 1
     fi
 
@@ -112,9 +138,17 @@ while [ "$HAS_MORE" = "true" ]; do
 
     print_success "批次 $BATCH_COUNT 完成: 处理了 $CHUNKS 个chunks"
 
-    # 检查是否有错误
+    # 检查是否有错误并记录
     if [ ! -z "$ERRORS" ] && [ "$ERRORS" != '"errors":[]' ]; then
-        print_warning "发现错误: $ERRORS"
+        ERROR_COUNT=$(echo "$ERRORS" | grep -o ":" | wc -l)
+        TOTAL_FAILED=$((TOTAL_FAILED + ERROR_COUNT))
+        print_warning "批次 $BATCH_COUNT 有 $ERROR_COUNT 个错误"
+
+        # 保存错误详情
+        if [ ! -z "$ALL_ERRORS" ]; then
+            ALL_ERRORS="$ALL_ERRORS\n"
+        fi
+        ALL_ERRORS="${ALL_ERRORS}批次 $BATCH_COUNT: $ERRORS"
     fi
 
     # 检查是否还有更多数据
@@ -145,5 +179,26 @@ print_info "=========================================="
 print_success "导入完成！"
 print_info "=========================================="
 print_info "总批次数: $BATCH_COUNT"
-print_info "总chunks: $TOTAL_PROCESSED / $TOTAL_CHUNKS"
+print_info "处理进度: $TOTAL_PROCESSED / $TOTAL_CHUNKS chunks"
+
+if [ $TOTAL_FAILED -gt 0 ]; then
+    echo ""
+    print_warning "⚠️  警告：有 $TOTAL_FAILED 个chunks失败"
+    print_warning "失败的chunks已被记录，可能需要手动检查"
+    echo ""
+    print_info "错误详情："
+    echo -e "$ALL_ERRORS" | head -20  # 只显示前20行错误
+    if [ $(echo -e "$ALL_ERRORS" | wc -l) -gt 20 ]; then
+        print_info "（还有更多错误...）"
+    fi
+    echo ""
+    print_warning "建议："
+    print_warning "1. 检查 Workers 日志查看详细错误"
+    print_warning "2. 确认 OpenAI API 配额和网络连接"
+    print_warning "3. 失败的chunks可能包含格式问题"
+else
+    echo ""
+    print_success "✓ 所有chunks成功导入，无错误！"
+fi
+
 echo ""

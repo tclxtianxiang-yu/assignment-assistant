@@ -96,21 +96,29 @@ export async function ingestDocuments(
 
         if (chunksToProcess.length > 0) {
           const result = await upsertVectors(chunksToProcess, env);
-          processedChunks = result.success;
 
-          if (result.failed > 0) {
-            console.warn(`⚠ ${result.failed} chunks failed in this batch`);
+          // 记录成功和失败的统计
+          const successCount = result.success;
+          const failCount = result.failed;
+
+          if (failCount > 0) {
+            console.warn(`⚠ ${failCount} chunks failed in this batch`);
             errors.push(...result.errors);
           }
 
-          if (result.success > 0) {
+          if (successCount > 0) {
             processedCount++;
-            console.log(`✓ Successfully processed ${obj.key}: ${result.success} chunks succeeded`);
+            console.log(`✓ Successfully processed ${obj.key}: ${successCount} chunks succeeded`);
           }
+
+          // 关键修复：无论成功或失败，都推进进度
+          // 这样可以避免某个 chunk 持续失败导致无限循环
+          // 失败的 chunks 会被记录在 errors 中
+          processedChunks = chunksToProcess.length;
         }
 
         if (processedChunks < chunksToProcess.length) {
-          console.warn(`Partial success: ${processedChunks}/${chunksToProcess.length} chunks upserted`);
+          console.warn(`Partial success: only ${processedChunks}/${chunksToProcess.length} chunks attempted`);
         }
       } catch (error) {
         const errorMsg = `Error processing ${obj.key}: ${error}`;
