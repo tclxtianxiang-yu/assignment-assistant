@@ -4,20 +4,30 @@ import { chunkText } from './utils/chunker';
 import { upsertVectors } from './utils/vectorize';
 
 /**
- * 从R2导入PDF并索引到向量数据库
+ * 从R2导入PDF并索引到向量数据库（支持分批）
  */
-export async function ingestDocuments(env: Env): Promise<{
+export async function ingestDocuments(
+  env: Env,
+  options: {
+    startChunk?: number;
+    maxChunks?: number;
+  } = {}
+): Promise<{
   success: boolean;
   processed: number;
   chunks: number;
+  totalChunks: number;
+  hasMore: boolean;
   errors: string[];
 }> {
+  const { startChunk = 0, maxChunks = 30 } = options; // 默认每次处理30个chunks
   const errors: string[] = [];
   let processedCount = 0;
   let totalChunks = 0;
+  let processedChunks = 0;
 
   try {
-    console.log('Starting document ingestion...');
+    console.log(`Starting document ingestion (chunks ${startChunk} to ${startChunk + maxChunks})...`);
 
     // 1. 列出R2中的所有PDF文件
     const list = await env.R2_BUCKET.list({ prefix: 'assignments/' });
@@ -75,15 +85,22 @@ export async function ingestDocuments(env: Env): Promise<{
             updated_at: Date.now(),
           }
         );
-        console.log(`Created ${chunks.length} chunks`);
+        totalChunks = chunks.length;
+        console.log(`Created ${totalChunks} chunks total`);
 
-        // 6. 生成嵌入并写入向量数据库
-        console.log('Generating embeddings and upserting to Vectorize...');
-        await upsertVectors(chunks, env);
+        // 6. 只处理指定范围的chunks（分批）
+        const endChunk = Math.min(startChunk + maxChunks, totalChunks);
+        const chunksToProcess = chunks.slice(startChunk, endChunk);
 
-        processedCount++;
-        totalChunks += chunks.length;
-        console.log(`✓ Successfully processed ${obj.key}`);
+        console.log(`Processing chunks ${startChunk} to ${endChunk} (${chunksToProcess.length} chunks)...`);
+
+        if (chunksToProcess.length > 0) {
+          await upsertVectors(chunksToProcess, env);
+          processedChunks = chunksToProcess.length;
+          processedCount++;
+        }
+
+        console.log(`✓ Successfully processed ${obj.key} (${processedChunks}/${totalChunks} chunks)`);
       } catch (error) {
         const errorMsg = `Error processing ${obj.key}: ${error}`;
         console.error(errorMsg);
@@ -91,15 +108,22 @@ export async function ingestDocuments(env: Env): Promise<{
       }
     }
 
-    console.log('\n=== Ingestion Complete ===');
+    const hasMore = startChunk + processedChunks < totalChunks;
+
+    console.log('\n=== Ingestion Batch Complete ===');
     console.log(`Processed: ${processedCount} documents`);
-    console.log(`Total chunks: ${totalChunks}`);
+    console.log(`Chunks in this batch: ${processedChunks}`);
+    console.log(`Total chunks in document: ${totalChunks}`);
+    console.log(`Progress: ${startChunk + processedChunks}/${totalChunks}`);
+    console.log(`Has more: ${hasMore}`);
     console.log(`Errors: ${errors.length}`);
 
     return {
       success: errors.length === 0,
       processed: processedCount,
-      chunks: totalChunks,
+      chunks: processedChunks,
+      totalChunks,
+      hasMore,
       errors,
     };
   } catch (error) {
@@ -107,7 +131,9 @@ export async function ingestDocuments(env: Env): Promise<{
     return {
       success: false,
       processed: processedCount,
-      chunks: totalChunks,
+      chunks: processedChunks,
+      totalChunks,
+      hasMore: false,
       errors: [...errors, `Fatal error: ${error}`],
     };
   }

@@ -153,9 +153,14 @@ app.post('/api/reindex', async (c) => {
     //   return c.json({ error: 'Unauthorized' }, 401);
     // }
 
-    console.log('Starting reindex operation...');
+    // 支持分批导入
+    const body = await c.req.json().catch(() => ({}));
+    const startChunk = body.startChunk || 0;
+    const maxChunks = body.maxChunks || 30;
 
-    const result = await ingestDocuments(c.env);
+    console.log(`Starting reindex operation (startChunk: ${startChunk}, maxChunks: ${maxChunks})...`);
+
+    const result = await ingestDocuments(c.env, { startChunk, maxChunks });
 
     console.log('Reindex completed:', result);
 
@@ -163,6 +168,9 @@ app.post('/api/reindex', async (c) => {
       success: result.success,
       processed: result.processed,
       chunks: result.chunks,
+      totalChunks: result.totalChunks,
+      hasMore: result.hasMore,
+      nextStartChunk: result.hasMore ? startChunk + result.chunks : undefined,
       errors: result.errors,
       timestamp: Date.now(),
     });
