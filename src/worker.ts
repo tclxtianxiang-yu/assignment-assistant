@@ -146,7 +146,8 @@ app.post('/api/reindex', async (c) => {
   try {
     // 简单的认证检查（生产环境应使用更安全的方式）
     const authHeader = c.req.header('Authorization');
-    const expectedToken = 'Bearer admin-secret-token'; // 应从环境变量读取
+    const adminToken = c.env.ADMIN_TOKEN || 'admin-secret-token';
+    const expectedToken = `Bearer ${adminToken}`;
 
     if (authHeader !== expectedToken) {
       return c.json({ error: 'Unauthorized' }, 401);

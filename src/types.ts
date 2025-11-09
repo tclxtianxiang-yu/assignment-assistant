@@ -3,6 +3,7 @@ export interface Env {
   R2_BUCKET: R2Bucket;
   VECTOR_INDEX: VectorizeIndex;
   OPENAI_API_KEY: string;
+  ADMIN_TOKEN?: string;
 }
 
 // 向量数据块元数据
