@@ -95,12 +95,23 @@ export async function ingestDocuments(
         console.log(`Processing chunks ${startChunk} to ${endChunk} (${chunksToProcess.length} chunks)...`);
 
         if (chunksToProcess.length > 0) {
-          await upsertVectors(chunksToProcess, env);
-          processedChunks = chunksToProcess.length;
-          processedCount++;
+          const result = await upsertVectors(chunksToProcess, env);
+          processedChunks = result.success;
+
+          if (result.failed > 0) {
+            console.warn(`⚠ ${result.failed} chunks failed in this batch`);
+            errors.push(...result.errors);
+          }
+
+          if (result.success > 0) {
+            processedCount++;
+            console.log(`✓ Successfully processed ${obj.key}: ${result.success} chunks succeeded`);
+          }
         }
 
-        console.log(`✓ Successfully processed ${obj.key} (${processedChunks}/${totalChunks} chunks)`);
+        if (processedChunks < chunksToProcess.length) {
+          console.warn(`Partial success: ${processedChunks}/${chunksToProcess.length} chunks upserted`);
+        }
       } catch (error) {
         const errorMsg = `Error processing ${obj.key}: ${error}`;
         console.error(errorMsg);
