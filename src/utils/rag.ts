@@ -14,7 +14,7 @@ export interface RAGConfig {
 
 const DEFAULT_CONFIG: RAGConfig = {
   topK: 6,
-  similarityThreshold: 0.7,
+  similarityThreshold: 0.5, // 降低阈值以提高召回率
   maxTokens: 3000,
   mmrLambda: 0.5,
 };
