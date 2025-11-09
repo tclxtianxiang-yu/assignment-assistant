@@ -2,7 +2,7 @@
 
 一、产品定位
 
-为学员提供“当日作业卡片 + 作业解答对话”的一站式小助手。
+为学员提供“作业解答对话”的一站式小助手。
 数据来源为 OSS 的 作业.pdf（可多个），系统自动抽取/索引，并结合 RAG 提供流程梳理、注意事项、答疑。
 
 二、核心用户故事
@@ -220,7 +220,7 @@ app.post("/api/chat", async (c) => {
 你需要知道的“平台可行性”要点（已验证文档）
 	•	Workers 原生读写 R2（绑定方式与 API 示例）。 ￼
 	•	Vectorize 是 Cloudflare 的全球分布式向量数据库，Workers 通过 binding 直接用，支持插入/查询。 ￼
-	•	Workers AI 使用 OpenAI ，直接把密钥通过wrangler命令行添加到Workers设置中，密钥: sk-proj-GSpY************************************S4rUA（已模糊处理，实际部署时请使用真实密钥）。 ￼
+	•	Workers 使用 OpenAI ，直接把密钥通过wrangler命令行添加到Workers设置中，密钥: sk-proj-GSpY************************************S4rUA（已模糊处理，实际部署时请使用真实密钥）。 ￼
 	•	Workers ingest/重建索引。 ￼
 	•	Mastra × Cloudflare 有部署器与示例，可在 Workers 上运行多 Agent/Workflow。 ￼
   •	项目开发到构建步骤即可，因为我cloudfare是用的0$套餐，不支持wrangler命令行部署，所以我会进行手动部署。

@@ -313,6 +313,7 @@ async function main() {
     try {
       // 1. 解析 PDF
       const text = await parsePDF(filePath);
+      logSuccess(`文本: ${text}`)
       logSuccess(`提取文本: ${text.length} 字符`);
 
       if (text.length < 100) {
