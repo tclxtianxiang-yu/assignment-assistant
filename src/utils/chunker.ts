@@ -49,16 +49,51 @@ export function chunkText(
         });
         chunkIndex++;
 
-        // 保留重叠部分
-        if (overlap > 0) {
-          const words = currentChunk.split(/\s+/);
-          const overlapWords = words.slice(-Math.ceil(overlap / 6)); // 假设平均每个词6个字符
-          currentChunk = overlapWords.join(' ') + '\n\n' + paragraph;
+        // 如果段落本身就超过size限制，需要强制分割
+        if (paragraph.length > size) {
+          // 按size分割超大段落
+          for (let start = 0; start < paragraph.length; start += size - overlap) {
+            const subChunk = paragraph.substring(start, start + size);
+            chunks.push({
+              id: `${baseMetadata.doc_id}-p${currentPage}-ck${String(chunkIndex).padStart(3, '0')}`,
+              text: subChunk.trim(),
+              metadata: {
+                ...baseMetadata,
+                page: currentPage
+              }
+            });
+            chunkIndex++;
+          }
+          currentChunk = '';
+        } else {
+          // 保留重叠部分
+          if (overlap > 0) {
+            const words = currentChunk.split(/\s+/);
+            const overlapWords = words.slice(-Math.ceil(overlap / 6)); // 假设平均每个词6个字符
+            currentChunk = overlapWords.join(' ') + '\n\n' + paragraph;
+          } else {
+            currentChunk = paragraph;
+          }
+        }
+      } else {
+        // currentChunk为空但paragraph超大，直接强制分割
+        if (paragraph.length > size) {
+          for (let start = 0; start < paragraph.length; start += size - overlap) {
+            const subChunk = paragraph.substring(start, start + size);
+            chunks.push({
+              id: `${baseMetadata.doc_id}-p${currentPage}-ck${String(chunkIndex).padStart(3, '0')}`,
+              text: subChunk.trim(),
+              metadata: {
+                ...baseMetadata,
+                page: currentPage
+              }
+            });
+            chunkIndex++;
+          }
+          currentChunk = '';
         } else {
           currentChunk = paragraph;
         }
-      } else {
-        currentChunk = paragraph;
       }
     } else {
       // 添加到当前块
