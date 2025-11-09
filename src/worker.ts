@@ -153,9 +153,14 @@ app.post('/api/reindex', async (c) => {
     //   return c.json({ error: 'Unauthorized' }, 401);
     // }
 
-    console.log('Starting reindex operation...');
+    // 支持分批导入
+    const body = await c.req.json().catch(() => ({}));
+    const startChunk = body.startChunk || 0;
+    const maxChunks = body.maxChunks || 30;
 
-    const result = await ingestDocuments(c.env);
+    console.log(`Starting reindex operation (startChunk: ${startChunk}, maxChunks: ${maxChunks})...`);
+
+    const result = await ingestDocuments(c.env, { startChunk, maxChunks });
 
     console.log('Reindex completed:', result);
 
@@ -163,11 +168,140 @@ app.post('/api/reindex', async (c) => {
       success: result.success,
       processed: result.processed,
       chunks: result.chunks,
+      totalChunks: result.totalChunks,
+      hasMore: result.hasMore,
+      nextStartChunk: result.hasMore ? startChunk + result.chunks : undefined,
       errors: result.errors,
       timestamp: Date.now(),
     });
   } catch (error) {
     console.error('Reindex error:', error);
+    return c.json(
+      {
+        error: 'Internal server error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      },
+      500
+    );
+  }
+});
+
+// API: 调试检索（管理员功能）
+app.post('/api/debug/retrieve', async (c) => {
+  try {
+    const { question } = await c.req.json();
+
+    if (!question) {
+      return c.json({ error: 'Missing question' }, 400);
+    }
+
+    console.log('[Debug] Question:', question);
+
+    // 1. 生成问题的 embedding
+    const { generateEmbedding } = await import('./utils/embeddings');
+    let queryEmbedding;
+    try {
+      queryEmbedding = await generateEmbedding(question, c.env);
+      console.log('[Debug] ✓ Query embedding generated, dimensions:', queryEmbedding.length);
+    } catch (error) {
+      console.error('[Debug] ✗ Embedding generation failed:', error);
+      return c.json({
+        error: 'Failed to generate embedding',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      }, 500);
+    }
+
+    // 2. 查询 Vectorize
+    console.log('[Debug] Querying Vectorize with topK=10...');
+    const results = await c.env.VECTOR_INDEX.query(queryEmbedding, {
+      topK: 10,
+      returnMetadata: true,
+      returnValues: false,
+    });
+
+    console.log(`[Debug] Found ${results.matches.length} matches`);
+
+    // 3. 格式化结果
+    const debugResults = results.matches.map((match: any, index: number) => ({
+      rank: index + 1,
+      id: match.id,
+      score: match.score,
+      metadata: {
+        doc_id: match.metadata?.doc_id,
+        phase: match.metadata?.phase,
+        section: match.metadata?.section,
+        page: match.metadata?.page,
+      },
+      text_preview: match.metadata?.text?.substring(0, 200) + '...' || 'No text',
+    }));
+
+    return c.json({
+      question,
+      totalMatches: results.matches.length,
+      matches: debugResults,
+      embeddingDimensions: queryEmbedding.length,
+      timestamp: Date.now(),
+    });
+  } catch (error) {
+    console.error('[Debug] Error:', error);
+    return c.json(
+      {
+        error: 'Internal server error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+      },
+      500
+    );
+  }
+});
+
+// API: 查看 Vectorize 统计信息（管理员功能）
+app.get('/api/debug/stats', async (c) => {
+  try {
+    console.log('[Debug] Getting Vectorize stats...');
+
+    // 使用一个随机向量查询来获取样本数据
+    const sampleVector = new Array(1536).fill(0).map(() => Math.random());
+
+    const results = await c.env.VECTOR_INDEX.query(sampleVector, {
+      topK: 100, // 获取更多结果来统计
+      returnMetadata: true,
+      returnValues: false,
+    });
+
+    console.log(`[Debug] Found ${results.matches.length} vectors in index`);
+
+    // 统计数据
+    const docIds = new Set<string>();
+    const phases = new Set<string>();
+    let totalVectors = results.matches.length;
+
+    const samples = results.matches.slice(0, 10).map((match: any) => ({
+      id: match.id,
+      metadata: match.metadata,
+    }));
+
+    results.matches.forEach((match: any) => {
+      if (match.metadata?.doc_id) {
+        docIds.add(match.metadata.doc_id);
+      }
+      if (match.metadata?.phase) {
+        phases.add(match.metadata.phase);
+      }
+    });
+
+    return c.json({
+      totalVectors,
+      uniqueDocuments: docIds.size,
+      uniquePhases: phases.size,
+      documents: Array.from(docIds),
+      phases: Array.from(phases),
+      samples,
+      note: totalVectors === 100 ? '显示前100个向量（可能有更多）' : '已显示所有向量',
+      timestamp: Date.now(),
+    });
+  } catch (error) {
+    console.error('[Debug] Stats error:', error);
     return c.json(
       {
         error: 'Internal server error',

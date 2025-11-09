@@ -43,7 +43,7 @@ export async function runRAGPipeline(
     env,
     {
       topK: 6,
-      similarityThreshold: 0.7,
+      similarityThreshold: 0.3, // 降低阈值以提高召回率（中文语义匹配较难，需要更低阈值）
     },
     filter
   );
