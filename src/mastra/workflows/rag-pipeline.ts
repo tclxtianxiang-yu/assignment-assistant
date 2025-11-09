@@ -50,26 +50,32 @@ export async function runRAGPipeline(
 
   console.log(`Retrieved ${retrievedDocs.length} documents`);
 
-  // 如果没有找到相关文档
+  let answer: string | ReadableStream;
+  let sources: string[] = [];
+
+  // 如果没有找到相关文档，切换到普通对话模式
   if (retrievedDocs.length === 0) {
-    return {
-      answer: '抱歉，在资料中未找到与您问题相关的内容。\n\n建议：\n- 尝试使用不同的关键词\n- 检查作业日期是否正确\n- 确保相关资料已上传到系统',
-      sources: [],
-      retrievedDocs: [],
-      stream: false,
-    };
+    console.log('No documents found, switching to normal chat mode...');
+    // 不提供上下文，让AI自由对话
+    answer = await generateAnswer(question, '', env, {
+      stream,
+      mode: 'chat' // 普通对话模式
+    });
+  } else {
+    // Step 2: 格式化上下文（RAG模式）
+    console.log('Step 2: Formatting context...');
+    const context = formatContext(retrievedDocs);
+
+    // Step 3: 生成答案（基于文档）
+    console.log('Step 3: Generating answer based on documents...');
+    answer = await generateAnswer(question, context, env, {
+      stream,
+      mode: 'rag' // RAG模式
+    });
+
+    // Step 4: 提取引用来源
+    sources = extractSources(retrievedDocs);
   }
-
-  // Step 2: 格式化上下文
-  console.log('Step 2: Formatting context...');
-  const context = formatContext(retrievedDocs);
-
-  // Step 3: 生成答案
-  console.log('Step 3: Generating answer...');
-  const answer = await generateAnswer(question, context, env, { stream });
-
-  // Step 4: 提取引用来源
-  const sources = extractSources(retrievedDocs);
 
   console.log('RAG Pipeline completed');
 

@@ -9,13 +9,23 @@ export async function generateEmbedding(
   env: Env
 ): Promise<number[]> {
   try {
+    // OpenAI text-embedding-3-small 最大支持 8192 tokens
+    // 粗略估计: 1 token ≈ 4 characters
+    const MAX_CHARS = 8000 * 4; // 保守估计32000字符
+
+    let processedText = text;
+    if (text.length > MAX_CHARS) {
+      console.warn(`Text too long (${text.length} chars), truncating to ${MAX_CHARS} chars`);
+      processedText = text.substring(0, MAX_CHARS);
+    }
+
     const openai = new OpenAI({
       apiKey: env.OPENAI_API_KEY,
     });
 
     const response = await openai.embeddings.create({
       model: 'text-embedding-3-small',
-      input: text,
+      input: processedText,
       encoding_format: 'float',
     });
 
