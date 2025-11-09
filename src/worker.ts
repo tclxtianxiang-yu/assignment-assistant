@@ -255,6 +255,63 @@ app.post('/api/debug/retrieve', async (c) => {
   }
 });
 
+// API: 查看 Vectorize 统计信息（管理员功能）
+app.get('/api/debug/stats', async (c) => {
+  try {
+    console.log('[Debug] Getting Vectorize stats...');
+
+    // 使用一个随机向量查询来获取样本数据
+    const sampleVector = new Array(1536).fill(0).map(() => Math.random());
+
+    const results = await c.env.VECTOR_INDEX.query(sampleVector, {
+      topK: 100, // 获取更多结果来统计
+      returnMetadata: true,
+      returnValues: false,
+    });
+
+    console.log(`[Debug] Found ${results.matches.length} vectors in index`);
+
+    // 统计数据
+    const docIds = new Set<string>();
+    const phases = new Set<string>();
+    let totalVectors = results.matches.length;
+
+    const samples = results.matches.slice(0, 10).map((match: any) => ({
+      id: match.id,
+      metadata: match.metadata,
+    }));
+
+    results.matches.forEach((match: any) => {
+      if (match.metadata?.doc_id) {
+        docIds.add(match.metadata.doc_id);
+      }
+      if (match.metadata?.phase) {
+        phases.add(match.metadata.phase);
+      }
+    });
+
+    return c.json({
+      totalVectors,
+      uniqueDocuments: docIds.size,
+      uniquePhases: phases.size,
+      documents: Array.from(docIds),
+      phases: Array.from(phases),
+      samples,
+      note: totalVectors === 100 ? '显示前100个向量（可能有更多）' : '已显示所有向量',
+      timestamp: Date.now(),
+    });
+  } catch (error) {
+    console.error('[Debug] Stats error:', error);
+    return c.json(
+      {
+        error: 'Internal server error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      },
+      500
+    );
+  }
+});
+
 // 前端应用路由
 app.get('/app', async (c) => {
   return c.html(FRONTEND_HTML);
