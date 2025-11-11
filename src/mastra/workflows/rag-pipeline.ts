@@ -43,7 +43,7 @@ export async function runRAGPipeline(
     env,
     {
       topK: 6,
-      similarityThreshold: 0.7,
+      similarityThreshold: 0.3, // 降低阈值以提高召回率（中文语义匹配较难，需要更低阈值）
     },
     filter
   );
@@ -53,9 +53,17 @@ export async function runRAGPipeline(
   let answer: string | ReadableStream;
   let sources: string[] = [];
 
-  // 如果没有找到相关文档，切换到普通对话模式
-  if (retrievedDocs.length === 0) {
-    console.log('No documents found, switching to normal chat mode...');
+  // 智能判断：即使检索到文档，如果相似度太低也切换到普通对话模式
+  // 这样可以处理像"你好"这种与语料无关的问题
+  const hasRelevantDocs = retrievedDocs.length > 0 && retrievedDocs[0].score >= 0.4;
+
+  if (!hasRelevantDocs) {
+    if (retrievedDocs.length > 0) {
+      console.log(`Documents found but low relevance (best score: ${retrievedDocs[0].score.toFixed(3)}), switching to chat mode...`);
+    } else {
+      console.log('No documents found, switching to normal chat mode...');
+    }
+
     // 不提供上下文，让AI自由对话
     answer = await generateAnswer(question, '', env, {
       stream,
